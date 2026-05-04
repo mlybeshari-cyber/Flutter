@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/device.dart';
 import '../models/position.dart';
 import '../services/traccar_service.dart';
+import 'device_detail_screen.dart';
 
 // Ekrani i hartës / Map screen
 
@@ -171,6 +172,186 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  
+  Widget _buildBottomSheet() {
+    final pos = _position!;
+    final totalDistance = pos.totalDistance ?? pos.odometer;
+    final todayDistance = totalDistance != null
+        ? '${(totalDistance / 1000).toStringAsFixed(0)} km driven today'
+        : 'No distance data';
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.image, size: 16, color: Colors.grey),
+                          const SizedBox(width: 6),
+                          Text(
+                            '1 of 12',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios, size: 16),
+                      onPressed: () {},
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onPressed: () {},
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.device.name,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: pos.speedKmh < 1.0 ? Colors.red : Colors.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      pos.speedKmh < 1.0 ? 'Parked' : 'Moving',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (pos.address != null)
+                  Row(
+                    children: [
+                      Icon(Icons.location_on,
+                          size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          pos.address!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today,
+                        size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 8),
+                    Text(
+                      todayDistance,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DeviceDetailScreen(
+                            device: widget.device,
+                          ),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1565C0),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'View more',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(Icons.arrow_forward, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMap() {
     // Pozicioni fillestar / Default position (Tirana, Albania)
     final defaultCenter = LatLng(41.3275, 19.8187);
@@ -238,129 +419,5 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildInfoPanel() {
-    final pos = _position!;
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      elevation: 8,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Titull i panelit / Panel title
-          InkWell(
-            onTap: () => setState(
-                () => _infoPanelExpanded = !_infoPanelExpanded),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline, color: Color(0xFF1565C0)),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Detajet e Pozicionit / Position Details',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    _infoPanelExpanded
-                        ? Icons.expand_more
-                        : Icons.expand_less,
-                    color: Colors.grey,
-                  ),
-                ],
-              ),
-            ),
-          ),
+  
 
-          if (_infoPanelExpanded) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  // Rreshti 1: Koordinatat / Row 1: Coordinates
-                  _buildInfoRow(
-                    Icons.my_location,
-                    'Koordinatat / Coordinates',
-                    '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}',
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Rreshti 2: Shpejtësia / Row 2: Speed
-                  _buildInfoRow(
-                    Icons.speed,
-                    'Shpejtësia / Speed',
-                    _formatSpeed(pos.speed),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Rreshti 3: Lartësia / Row 3: Altitude
-                  _buildInfoRow(
-                    Icons.landscape,
-                    'Lartësia / Altitude',
-                    '${pos.altitude.toStringAsFixed(0)} m',
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Rreshti 4: Drejtimi / Row 4: Course
-                  _buildInfoRow(
-                    Icons.navigation,
-                    'Drejtimi / Course',
-                    _formatCourse(pos.course),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Rreshti 5: Koha / Row 5: Time
-                  _buildInfoRow(
-                    Icons.access_time,
-                    'Koha / Time',
-                    _formatTime(pos.fixTime),
-                  ),
-
-                  // Adresa nëse ekziston / Address if exists
-                  if (pos.address != null && pos.address!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    _buildInfoRow(
-                      Icons.place,
-                      'Adresa / Address',
-                      pos.address!,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: const Color(0xFF1565C0)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: const TextStyle(
-                      fontSize: 11, color: Colors.grey)),
-              Text(value,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w500, fontSize: 13)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}

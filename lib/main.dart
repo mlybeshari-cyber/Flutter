@@ -1,38 +1,30 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/traccar_service.dart';
 import 'screens/login_screen.dart';
-
-// Pika e hyrjes e aplikacionit Traccar Flutter
-// Entry point of the Traccar Flutter application
+import 'screens/main_map_screen.dart';
 
 void main() async {
-  // Siguro inicializimin e Flutter / Ensure Flutter initialization
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Inicializo shërbimin / Initialize the service
   final service = TraccarService();
   await service.init();
-
   runApp(
-    // Provide TraccarService to the whole app / Ofroj TraccarService për gjithë aplikacionin
-    Provider<TraccarService>.value(
+    Provider.value(
       value: service,
-      child: const TraccarApp(),
+      child: TraccarApp(service: service),
     ),
   );
 }
 
 class TraccarApp extends StatelessWidget {
-  const TraccarApp({super.key});
+  final TraccarService service;
+  const TraccarApp({super.key, required this.service});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Traccar GPS',
       debugShowCheckedModeBanner: false,
-
-      // Tema e çelët / Light theme
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -63,8 +55,6 @@ class TraccarApp extends StatelessWidget {
           ),
         ),
       ),
-
-      // Tema e errët / Dark theme
       darkTheme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -95,12 +85,8 @@ class TraccarApp extends StatelessWidget {
           ),
         ),
       ),
-
-      // Ndyshimi automatik i temës / Automatic theme switch
       themeMode: ThemeMode.system,
-
-      // Ekrani fillestar / Initial screen
-      home: const LoginScreen(),
+      home: service.hasCredentials ? const MainMapScreen() : const LoginScreen(),
     );
   }
 }

@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
@@ -121,9 +121,9 @@ class TraccarService {
         'Accept': 'application/json',
       },
       body: {'email': username, 'password': password},
-    );
+    .timeout(const Duration(seconds: 15)));
 
-    _handleCookies(response);
+    _handleCookies(response.timeout(const Duration(seconds: 15)));
 
     if (response.statusCode == 200) {
       return Session.fromJson(jsonDecode(response.body));
@@ -153,9 +153,9 @@ class TraccarService {
     final response = await http.get(
       Uri.parse('$_apiUrl/session'),
       headers: _buildHeaders(),
-    );
+    .timeout(const Duration(seconds: 15)));
 
-    _handleCookies(response);
+    _handleCookies(response.timeout(const Duration(seconds: 15)));
 
     if (response.statusCode == 200) {
       return Session.fromJson(jsonDecode(response.body));
@@ -174,7 +174,7 @@ class TraccarService {
     final response = await http.get(
       Uri.parse('$_apiUrl/devices'),
       headers: _buildHeaders(),
-    );
+    .timeout(const Duration(seconds: 15)));
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -192,7 +192,7 @@ class TraccarService {
     final response = await http.get(
       Uri.parse('$_apiUrl/devices/$id'),
       headers: _buildHeaders(),
-    );
+    .timeout(const Duration(seconds: 15)));
 
     if (response.statusCode == 200) {
       return Device.fromJson(jsonDecode(response.body));
@@ -214,7 +214,7 @@ class TraccarService {
           : null,
     );
 
-    final response = await http.get(uri, headers: _buildHeaders());
+    final response = await http.get(uri, headers: _buildHeaders().timeout(const Duration(seconds: 15)));
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -239,7 +239,7 @@ class TraccarService {
       },
     );
 
-    final response = await http.get(uri, headers: _buildHeaders());
+    final response = await http.get(uri, headers: _buildHeaders().timeout(const Duration(seconds: 15)));
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -258,3 +258,4 @@ class TraccarService {
   /// Kontrollo nëse ka kredenciale / Check if credentials exist
   bool get hasCredentials => _username.isNotEmpty && _password.isNotEmpty;
 }
+

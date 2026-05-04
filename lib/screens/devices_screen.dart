@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/device.dart';
@@ -7,6 +7,7 @@ import '../services/traccar_service.dart';
 import '../widgets/device_card.dart';
 import 'login_screen.dart';
 import 'map_screen.dart';
+import 'device_detail_screen.dart';
 
 // Ekrani i listës së pajisjeve / Devices list screen
 
@@ -132,16 +133,17 @@ class _DevicesScreenState extends State<DevicesScreen> {
   }
 
   // Hap ekranin e hartës / Opens map screen
-  void _openMap(Device device) {
+  void _openDeviceDetail(Device device) {
     _refreshTimer?.cancel();
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => MapScreen(device: device),
+        builder: (_) => DeviceDetailScreen(device: device),
       ),
     ).then((_) {
       _loadDevices();
       _startAutoRefresh();
     });
+  });
   }
 
   @override
@@ -246,10 +248,11 @@ class _DevicesScreenState extends State<DevicesScreen> {
           final device = _devices[index];
           return DeviceCard(
             device: device,
-            onTap: () => _openMap(device),
+            onTap: () => _openDeviceDetail(device),
           );
         },
       ),
     );
   }
 }
+
