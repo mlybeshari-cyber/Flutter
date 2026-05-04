@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/traccar_service.dart';
 import '../models/session.dart';
-import 'devices_screen.dart';
+import 'main_map_screen.dart';
 
 // Ekrani i kyçjes / Login screen
 
@@ -50,9 +50,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
+      // Hap hartën kryesore pas login / Open main map after login
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => DevicesScreen(session: session),
+          builder: (_) => MainMapScreen(session: session),
         ),
       );
     } catch (e) {
@@ -140,13 +141,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: const InputDecoration(
                         hintText: 'Enter the server address',
                         helperText: "Example: 'yourserver.com'",
-                        helperStyle: TextStyle(fontSize: 12, color: Color(0xFF9E9E9E)),
+                        helperStyle:
+                            TextStyle(fontSize: 12, color: Color(0xFF9E9E9E)),
                         border: UnderlineInputBorder(),
                         enabledBorder: UnderlineInputBorder(
                           borderSide: BorderSide(color: Color(0xFFBDBDBD)),
                         ),
                         focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFF2196F3), width: 2),
+                          borderSide:
+                              BorderSide(color: Color(0xFF2196F3), width: 2),
                         ),
                         contentPadding: EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
@@ -182,7 +185,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderSide: BorderSide(color: Color(0xFFBDBDBD)),
                         ),
                         focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFF2196F3), width: 2),
+                          borderSide:
+                              BorderSide(color: Color(0xFF2196F3), width: 2),
                         ),
                         contentPadding: EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
@@ -218,17 +222,22 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderSide: BorderSide(color: Color(0xFFBDBDBD)),
                         ),
                         focusedBorder: const UnderlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFF2196F3), width: 2),
+                          borderSide:
+                              BorderSide(color: Color(0xFF2196F3), width: 2),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                             size: 20,
                             color: Colors.grey,
                           ),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword),
                         ),
                       ),
                       validator: (value) {
@@ -246,7 +255,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Text(
                           _errorMessage!,
-                          style: const TextStyle(color: Colors.red, fontSize: 13),
+                          style: const TextStyle(
+                              color: Colors.red, fontSize: 13),
                         ),
                       ),
 
