@@ -12,6 +12,16 @@ import 'map_screen.dart';
 
 // Ekrani kryesor me hartë të plotë / Main full-screen map screen
 
+// Statuset e mundshme të ikonave / Possible icon states
+enum DeviceMarkerState {
+  moving,   // 🟢 Shigjetë jeshile — ignition=true, speed > 2 km/h
+  idle,     // 🔵 Pause blu    — ignition=true, speed < 1 km/h
+  parked,   // 🟡 Parking      — ignition=false
+  pending,  // 🟠 Satelit      — satellites > 4 (por nuk ka lëvizje/ignicion)
+  offline,  // 🔴 Offline      — lastUpdate > 10 minuta
+  unknown,  // ⚫ E panjohur
+}
+
 class MainMapScreen extends StatefulWidget {
   final Session session;
 
@@ -26,14 +36,15 @@ class _MainMapScreenState extends State<MainMapScreen> {
   List<Position> _positions = [];
   final MapController _mapController = MapController();
 
-  // Timer — NDALON vetëm në dispose() dhe logout()
-  // Timer — stops ONLY on dispose() and logout()
   Timer? _refreshTimer;
 
   int _currentLayer = 0;
   final List<Map<String, String>> _layers = [
     {'name': 'Standard', 'url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'},
-    {'name': 'Satellite', 'url': 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'},
+    {
+      'name': 'Satellite',
+      'url': 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+    },
     {'name': 'Terrain', 'url': 'https://tile.opentopomap.org/{z}/{x}/{y}.png'},
   ];
 
@@ -41,8 +52,6 @@ class _MainMapScreenState extends State<MainMapScreen> {
   void initState() {
     super.initState();
     _loadData();
-    // Fillo timerin — NUK ndalet kurrë derisa të shkyçesh
-    // Start timer — NEVER stops until logout
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _silentRefresh(),
@@ -55,8 +64,6 @@ class _MainMapScreenState extends State<MainMapScreen> {
     super.dispose();
   }
 
-  // Refresh i heshtur çdo 5 sek — GJITHMONË aktiv
-  // Silent refresh every 5s — ALWAYS active
   Future<void> _silentRefresh() async {
     if (!mounted) return;
     try {
@@ -71,12 +78,9 @@ class _MainMapScreenState extends State<MainMapScreen> {
           _positions = results[1] as List<Position>;
         });
       }
-    } catch (_) {
-      // Injoro gabimet e rrjetit / Ignore network errors silently
-    }
+    } catch (_) {}
   }
 
-  // Ngarkim fillestar / Initial load
   Future<void> _loadData() async {
     try {
       final service = context.read<TraccarService>();
@@ -101,18 +105,83 @@ class _MainMapScreenState extends State<MainMapScreen> {
     }
   }
 
-  // Ngjyra sipas statusit / Color by status
-  Color _deviceColor(Device device) {
-    if (device.disabled) return Colors.grey;
-    switch (device.status) {
-      case 'online': return Colors.green;
-      case 'offline': return Colors.red;
-      default: return Colors.orange;
+  // ─── Logjika e statusit të markerit / Marker state logic ──────────────────
+  //
+  // 1. OFFLINE   → lastUpdate > 10 min (kontrollohet tek Device)
+  // 2. MOVING    → ignition=true  AND  speed > 2 km/h  → shigjetë jeshile
+  // 3. IDLE      → ignition=true  AND  speed < 1 km/h  → pause blu
+  // 4. PARKED    → ignition=false                       → P jeshile
+  // 5. PENDING   → satellites > 4 (por pa ignicion/lëvizje të qartë)
+  // 6. UNKNOWN   → gjithçka tjetër
+  DeviceMarkerState _getMarkerState(Device device, Position? pos) {
+    // Kontrollo offline: device.status == 'offline' OSE lastUpdate > 10 min
+    if (device.status == 'offline') return DeviceMarkerState.offline;
+
+    if (device.lastUpdate != null) {
+      try {
+        final last = DateTime.parse(device.lastUpdate!);
+        if (DateTime.now().difference(last).inMinutes > 10) {
+          return DeviceMarkerState.offline;
+        }
+      } catch (_) {}
+    }
+
+    if (pos == null) return DeviceMarkerState.unknown;
+
+    final ignition = pos.ignition;
+    final speedKmh = pos.speedKmh;
+    final satellites = (pos.attributes['sat'] as num?)?.toInt() ??
+        (pos.attributes['satellites'] as num?)?.toInt() ?? 0;
+
+    // Moving: ignition=true dhe speed > 2 km/h
+    if (ignition == true && speedKmh > 2) return DeviceMarkerState.moving;
+
+    // Idle: ignition=true dhe speed < 1 km/h
+    if (ignition == true && speedKmh < 1) return DeviceMarkerState.idle;
+
+    // Parked: ignition=false
+    if (ignition == false) return DeviceMarkerState.parked;
+
+    // Pending: satelitë > 4 (por ignicion i panjohur)
+    if (satellites > 4) return DeviceMarkerState.pending;
+
+    return DeviceMarkerState.unknown;
+  }
+
+  // Ikona dhe ngjyra sipas statusit / Icon and color by state
+  IconData _markerIcon(DeviceMarkerState state) {
+    switch (state) {
+      case DeviceMarkerState.moving:  return Icons.navigation;        // shigjetë
+      case DeviceMarkerState.idle:    return Icons.pause_circle_filled; // pause
+      case DeviceMarkerState.parked:  return Icons.local_parking;     // P
+      case DeviceMarkerState.pending: return Icons.satellite_alt;      // satelit
+      case DeviceMarkerState.offline: return Icons.signal_wifi_off;    // offline
+      case DeviceMarkerState.unknown: return Icons.help_outline;
     }
   }
 
-  // Shkyçja — vetëm këtu anulohet timeri
-  // Logout — only here the timer is cancelled
+  Color _markerColor(DeviceMarkerState state) {
+    switch (state) {
+      case DeviceMarkerState.moving:  return Colors.green;
+      case DeviceMarkerState.idle:    return const Color(0xFF1E88E5); // blu
+      case DeviceMarkerState.parked:  return Colors.amber.shade700;
+      case DeviceMarkerState.pending: return Colors.orange;
+      case DeviceMarkerState.offline: return Colors.red;
+      case DeviceMarkerState.unknown: return Colors.grey;
+    }
+  }
+
+  String _markerLabel(DeviceMarkerState state) {
+    switch (state) {
+      case DeviceMarkerState.moving:  return 'Lëvizje';
+      case DeviceMarkerState.idle:    return 'Ndal';
+      case DeviceMarkerState.parked:  return 'Parkuar';
+      case DeviceMarkerState.pending: return 'Në pritje';
+      case DeviceMarkerState.offline: return 'Offline';
+      case DeviceMarkerState.unknown: return 'I panjohur';
+    }
+  }
+
   Future<void> _logout() async {
     _refreshTimer?.cancel();
     final confirm = await showDialog<bool>(
@@ -142,7 +211,6 @@ class _MainMapScreenState extends State<MainMapScreen> {
         );
       }
     } else {
-      // Nëse anuloi logout, rinis timerin
       if (mounted) {
         _refreshTimer = Timer.periodic(
           const Duration(seconds: 5),
@@ -153,7 +221,6 @@ class _MainMapScreenState extends State<MainMapScreen> {
   }
 
   void _openDeviceList() {
-    // NUK anulojmë timerin / Do NOT cancel timer
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -171,7 +238,8 @@ class _MainMapScreenState extends State<MainMapScreen> {
             children: [
               const SizedBox(height: 8),
               Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(2),
@@ -184,7 +252,8 @@ class _MainMapScreenState extends State<MainMapScreen> {
                     const Icon(Icons.directions_car, color: Color(0xFF1565C0)),
                     const SizedBox(width: 8),
                     Text('Pajisjet (${_devices.length})',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
@@ -196,22 +265,25 @@ class _MainMapScreenState extends State<MainMapScreen> {
                   itemBuilder: (_, i) {
                     final d = _devices[i];
                     final pos = _getPosition(d.id);
+                    final state = _getMarkerState(d, pos);
                     return ListTile(
-                      leading: Icon(Icons.directions_car, color: _deviceColor(d)),
+                      leading: Icon(_markerIcon(state),
+                          color: _markerColor(state), size: 28),
                       title: Text(d.name,
                           style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: _buildDeviceSubtitle(d, pos),
+                      subtitle: _buildDeviceSubtitle(d, pos, state),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () {
                         Navigator.pop(context);
                         if (pos != null) {
                           _mapController.move(
-                            LatLng(pos.latitude, pos.longitude), 15.0);
+                              LatLng(pos.latitude, pos.longitude), 15.0);
                         }
                         Future.delayed(const Duration(milliseconds: 200), () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => MapScreen(device: d)),
+                            MaterialPageRoute(
+                                builder: (_) => MapScreen(device: d)),
                           );
                         });
                       },
@@ -226,21 +298,21 @@ class _MainMapScreenState extends State<MainMapScreen> {
     );
   }
 
-  // Tregon statusin dhe shpejtësinë / Shows status and speed
-  Widget _buildDeviceSubtitle(Device d, Position? pos) {
-    final statusText = d.disabled ? 'I çaktivizuar' : d.status;
-    final speedText = pos != null && pos.speedKmh > 0
+  Widget _buildDeviceSubtitle(Device d, Position? pos, DeviceMarkerState state) {
+    final label = _markerLabel(state);
+    final speedText = pos != null && pos.speedKmh > 0.5
         ? ' • ${pos.speedKmh.toStringAsFixed(0)} km/h'
         : '';
-    final ignText = pos?.ignition == true ? ' • 🔑 ON' : (pos?.ignition == false ? ' • 🔑 OFF' : '');
+    final satellites = (pos?.attributes['sat'] as num?)?.toInt() ??
+        (pos?.attributes['satellites'] as num?)?.toInt();
+    final satText = satellites != null ? ' • 🛰 $satellites' : '';
     return Text(
-      '$statusText$speedText$ignText',
-      style: TextStyle(fontSize: 12, color: _deviceColor(d)),
+      '$label$speedText$satText',
+      style: TextStyle(fontSize: 12, color: _markerColor(state)),
     );
   }
 
   void _openMenu() {
-    // NUK anulojmë timerin / Do NOT cancel timer
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -254,7 +326,8 @@ class _MainMapScreenState extends State<MainMapScreen> {
           children: [
             const SizedBox(height: 8),
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
@@ -267,11 +340,30 @@ class _MainMapScreenState extends State<MainMapScreen> {
               ),
               title: Text(widget.session.name,
                   style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(widget.session.email ?? 'GPS Tracking'),
+              subtitle: Text(widget.session.email),
+            ),
+            const Divider(),
+            // Legjenda / Legend
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                children: DeviceMarkerState.values.map((s) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(_markerIcon(s), color: _markerColor(s), size: 16),
+                    const SizedBox(width: 4),
+                    Text(_markerLabel(s),
+                        style: const TextStyle(fontSize: 11)),
+                  ],
+                )).toList(),
+              ),
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.directions_car, color: Color(0xFF1565C0)),
+              leading: const Icon(Icons.directions_car,
+                  color: Color(0xFF1565C0)),
               title: Text('Pajisjet (${_devices.length}) / Devices'),
               onTap: () {
                 Navigator.pop(context);
@@ -304,7 +396,7 @@ class _MainMapScreenState extends State<MainMapScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // ── Harta e plotë / Full map ────────────────────────────────────
+          // ── Harta e plotë / Full map ────────────────────────────────────────
           FlutterMap(
             mapController: _mapController,
             options: const MapOptions(
@@ -322,8 +414,8 @@ class _MainMapScreenState extends State<MainMapScreen> {
                   if (pos == null) return null;
                   return Marker(
                     point: LatLng(pos.latitude, pos.longitude),
-                    width: 70,
-                    height: 58,
+                    width: 72,
+                    height: 60,
                     child: GestureDetector(
                       onTap: () {
                         Navigator.push(
@@ -340,15 +432,17 @@ class _MainMapScreenState extends State<MainMapScreen> {
             ],
           ),
 
-          // ── Menu sipër majtë / Top-left menu ───────────────────────────
+          // ── Menu sipër majtë / Top-left menu ───────────────────────────────
           Positioned(
-            top: 40, left: 12,
+            top: 40,
+            left: 12,
             child: _mapButton(icon: Icons.menu, onTap: _openMenu),
           ),
 
-          // ── Butonat djathtas / Right buttons ───────────────────────────
+          // ── Butonat djathtas / Right buttons ───────────────────────────────
           Positioned(
-            top: 40, right: 12,
+            top: 40,
+            right: 12,
             child: Column(
               children: [
                 _mapButton(
@@ -359,26 +453,30 @@ class _MainMapScreenState extends State<MainMapScreen> {
                 const SizedBox(height: 8),
                 _mapButton(
                   icon: Icons.zoom_out_map,
-                  onTap: () => _mapController.move(LatLng(41.3275, 19.8187), 7.0),
+                  onTap: () =>
+                      _mapController.move(LatLng(41.3275, 19.8187), 7.0),
                 ),
                 const SizedBox(height: 8),
                 _mapButton(
                   icon: Icons.my_location,
-                  onTap: () => _mapController.move(LatLng(41.3275, 19.8187), 7.0),
+                  onTap: () =>
+                      _mapController.move(LatLng(41.3275, 19.8187), 7.0),
                 ),
               ],
             ),
           ),
 
-          // ── Butonat poshtë majtë / Bottom-left buttons ─────────────────
+          // ── Butonat poshtë majtë / Bottom-left buttons ─────────────────────
           Positioned(
-            bottom: 32, left: 12,
+            bottom: 32,
+            left: 12,
             child: Column(
               children: [
                 _mapButton(
                   icon: Icons.directions_car,
                   onTap: _openDeviceList,
-                  badge: _devices.isNotEmpty ? '${_devices.length}' : null,
+                  badge:
+                      _devices.isNotEmpty ? '${_devices.length}' : null,
                 ),
                 const SizedBox(height: 8),
                 _mapButton(
@@ -402,15 +500,19 @@ class _MainMapScreenState extends State<MainMapScreen> {
     );
   }
 
-  // Markeri i pajisjes mbi hartë / Device marker on map
+  // ─── Ndërtimi i markerit sipas statusit / Build marker by state ────────────
   Widget _buildMarker(Device device, Position pos) {
-    final color = _deviceColor(device);
-    // Rrotullim sipas drejtimit / Rotate by course
+    final state = _getMarkerState(device, pos);
+    final icon = _markerIcon(state);
+    final color = _markerColor(state);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Label me emrin e pajisjes / Device name label
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(4),
@@ -430,17 +532,35 @@ class _MainMapScreenState extends State<MainMapScreen> {
                 overflow: TextOverflow.ellipsis),
           ),
         ),
-        Transform.rotate(
-          angle: pos.course * (3.14159265 / 180),
-          child: Icon(
-            Icons.navigation,
-            color: color,
-            size: 30,
-            shadows: const [
-              Shadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
-            ],
-          ),
-        ),
+
+        // Ikona e statusit / Status icon
+        // Nëse lëviz, rrotulloje sipas drejtimit / If moving, rotate by course
+        state == DeviceMarkerState.moving
+            ? Transform.rotate(
+                angle: pos.course * (3.14159265 / 180),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 30,
+                  shadows: const [
+                    Shadow(
+                        color: Colors.black26,
+                        blurRadius: 4,
+                        offset: Offset(0, 2))
+                  ],
+                ),
+              )
+            : Icon(
+                icon,
+                color: color,
+                size: 30,
+                shadows: const [
+                  Shadow(
+                      color: Colors.black26,
+                      blurRadius: 4,
+                      offset: Offset(0, 2))
+                ],
+              ),
       ],
     );
   }
@@ -454,7 +574,8 @@ class _MainMapScreenState extends State<MainMapScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 44, height: 44,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
@@ -472,7 +593,8 @@ class _MainMapScreenState extends State<MainMapScreen> {
             Icon(icon, size: 22, color: Colors.black87),
             if (badge != null)
               Positioned(
-                top: 4, right: 4,
+                top: 4,
+                right: 4,
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: const BoxDecoration(
