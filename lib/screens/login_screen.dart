@@ -17,8 +17,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // Kontrollorët e fushave / Field controllers
+  // URL default pa /api — shtohet automatikisht nga kodi
+  // Default URL without /api — appended automatically by code
   final _urlController = TextEditingController(
-    text: 'https://demo.traccar.org/api',
+    text: 'https://gps.sts.al',
   );
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -54,7 +56,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      // Navigo te ekrani i pajisjeve / Navigate to devices screen
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => DevicesScreen(session: session),
@@ -131,7 +132,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           keyboardType: TextInputType.url,
                           decoration: const InputDecoration(
                             labelText: 'Server URL',
-                            hintText: 'https://demo.traccar.org/api',
+                            hintText: 'https://gps.sts.al',
+                            helperText: '/api shtohet automatikisht',
                             prefixIcon: Icon(Icons.cloud),
                             border: OutlineInputBorder(),
                           ),
