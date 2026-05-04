@@ -24,9 +24,10 @@ class _DevicesScreenState extends State<DevicesScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  // Timer për auto-refresh çdo 4 sekonda / Auto-refresh timer every 4 seconds
+  // Timer për auto-refresh çdo 5 sekonda (i padukshëm)
+  // Silent auto-refresh timer every 5 seconds
   Timer? _refreshTimer;
-  static const int _refreshIntervalSeconds = 4;
+  static const int _refreshIntervalSeconds = 5;
 
   @override
   void initState() {
@@ -37,47 +38,55 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
   @override
   void dispose() {
-    // Ndalo timerin kur ekrani mbyllet / Stop timer when screen is closed
     _refreshTimer?.cancel();
     super.dispose();
   }
 
-  // Fillon auto-refresh çdo 4 sekonda / Starts auto-refresh every 4 seconds
+  // Auto-refresh çdo 5 sekonda — i heshtur, pa loading
   void _startAutoRefresh() {
+    _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: _refreshIntervalSeconds),
-      (_) => _loadDevices(silent: true),
+      (_) => _silentRefresh(),
     );
   }
 
-  // Ngarkon listën e pajisjeve / Loads devices list
-  // silent=true: nuk tregon loading spinner (për auto-refresh)
-  // silent=true: doesn't show loading spinner (for auto-refresh)
-  Future<void> _loadDevices({bool silent = false}) async {
-    if (!silent) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
+  // Refresh i padukshëm — përditëson të dhënat pa asnjë ndryshim vizual
+  // Invisible refresh — updates data without any visual change
+  Future<void> _silentRefresh() async {
+    if (!mounted) return;
+    try {
+      final service = context.read<TraccarService>();
+      final devices = await service.getDevices();
+      if (mounted) {
+        setState(() => _devices = devices);
+      }
+    } catch (_) {
+      // Injoro gabimet e auto-refresh / Ignore auto-refresh errors silently
     }
+  }
+
+  // Ngarkon herën e parë me loading spinner / First load with spinner
+  Future<void> _loadDevices() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final service = context.read<TraccarService>();
       final devices = await service.getDevices();
       if (mounted) {
-        setState(() {
-          _devices = devices;
-          if (!silent) _errorMessage = null;
-        });
+        setState(() => _devices = devices);
       }
     } catch (e) {
-      if (mounted && !silent) {
+      if (mounted) {
         setState(() {
           _errorMessage = e.toString().replaceFirst('Exception: ', '');
         });
       }
     } finally {
-      if (mounted && !silent) {
+      if (mounted) {
         setState(() => _isLoading = false);
       }
     }
@@ -118,21 +127,18 @@ class _DevicesScreenState extends State<DevicesScreen> {
         );
       }
     } else {
-      // Rinis timerin nëse anulojmë / Restart timer if cancelled
       _startAutoRefresh();
     }
   }
 
   // Hap ekranin e hartës / Opens map screen
   void _openMap(Device device) {
-    // Ndalo timerin gjatë hartës / Pause timer during map view
     _refreshTimer?.cancel();
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MapScreen(device: device),
       ),
     ).then((_) {
-      // Rinis timerin kur kthehemi / Restart timer when we return
       _loadDevices();
       _startAutoRefresh();
     });
@@ -156,32 +162,11 @@ class _DevicesScreenState extends State<DevicesScreen> {
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
         actions: [
-          // Tregues i auto-refresh / Auto-refresh indicator
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
-            child: Row(
-              children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white54,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${_refreshIntervalSeconds}s',
-                  style: const TextStyle(fontSize: 11, color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
           // Butoni i rifreskimit manual / Manual refresh button
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Rifresko / Refresh',
-            onPressed: _isLoading ? null : () => _loadDevices(),
+            onPressed: _isLoading ? null : _loadDevices,
           ),
           // Butoni i daljes / Logout button
           IconButton(
@@ -252,7 +237,6 @@ class _DevicesScreenState extends State<DevicesScreen> {
       );
     }
 
-    // Pull-to-refresh lista / Pull-to-refresh list
     return RefreshIndicator(
       onRefresh: _loadDevices,
       child: ListView.builder(
