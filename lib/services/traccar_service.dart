@@ -9,8 +9,8 @@ import '../models/session.dart';
 // Main service for communicating with Traccar REST API
 
 class TraccarService {
-  // URL bazë e serverit / Base URL of the server
-  String _baseUrl = 'https://demo.traccar.org/api';
+  // URL bazë e serverit (pa /api) / Base URL of the server (without /api)
+  String _baseUrl = 'https://gps.sts.al';
   String _username = '';
   String _password = '';
 
@@ -23,12 +23,23 @@ class TraccarService {
 
   TraccarService();
 
+  // Ndërton URL-në e plotë duke shtuar /api automatikisht
+  // Builds the full API URL by appending /api automatically
+  String get _apiUrl {
+    final clean = _baseUrl.endsWith('/')
+        ? _baseUrl.substring(0, _baseUrl.length - 1)
+        : _baseUrl;
+    // Nëse tashmë ka /api në fund, mos e shto përsëri
+    // If it already ends with /api, don't add it again
+    if (clean.endsWith('/api')) return clean;
+    return '$clean/api';
+  }
+
   // Inicializon shërbimin duke lexuar kredencialet e ruajtura
   // Initializes the service by reading saved credentials
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _baseUrl =
-        prefs.getString(_prefBaseUrl) ?? 'https://demo.traccar.org/api';
+    _baseUrl = prefs.getString(_prefBaseUrl) ?? 'https://gps.sts.al';
     _username = prefs.getString(_prefUsername) ?? '';
     _password = prefs.getString(_prefPassword) ?? '';
   }
@@ -39,11 +50,16 @@ class TraccarService {
     required String username,
     required String password,
   }) async {
+    // Hiq /api nga fundi nëse ekziston / Remove /api suffix if present
+    String cleanUrl = baseUrl.trim();
+    if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.substring(0, cleanUrl.length - 1);
+    if (cleanUrl.endsWith('/api')) cleanUrl = cleanUrl.substring(0, cleanUrl.length - 4);
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefBaseUrl, baseUrl);
+    await prefs.setString(_prefBaseUrl, cleanUrl);
     await prefs.setString(_prefUsername, username);
     await prefs.setString(_prefPassword, password);
-    _baseUrl = baseUrl;
+    _baseUrl = cleanUrl;
     _username = username;
     _password = password;
   }
@@ -75,11 +91,10 @@ class TraccarService {
     return headers;
   }
 
-  // Trajton përgjigjen e serverit / Handles server response
+  // Trajton përgjigjen e serverit / Handles server response cookies
   void _handleCookies(http.Response response) {
     final rawCookie = response.headers['set-cookie'];
     if (rawCookie != null) {
-      // Merr vetëm JSESSIONID / Take only JSESSIONID
       final match = RegExp(r'JSESSIONID=[^;]+').firstMatch(rawCookie);
       if (match != null) {
         _sessionCookie = match.group(0);
@@ -95,18 +110,11 @@ class TraccarService {
     required String username,
     required String password,
   }) async {
-    // Normalizo URL / Normalize URL
-    final cleanUrl = baseUrl.endsWith('/')
-        ? baseUrl.substring(0, baseUrl.length - 1)
-        : baseUrl;
-
-    // Ruaj kredencialet para kërkesës / Save credentials before request
-    await saveCredentials(
-        baseUrl: cleanUrl, username: username, password: password);
+    await saveCredentials(baseUrl: baseUrl, username: username, password: password);
 
     final credentials = base64Encode(utf8.encode('$username:$password'));
     final response = await http.post(
-      Uri.parse('$cleanUrl/session'),
+      Uri.parse('$_apiUrl/session'),
       headers: {
         'Authorization': 'Basic $credentials',
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -131,11 +139,10 @@ class TraccarService {
   Future<void> logout() async {
     try {
       await http.delete(
-        Uri.parse('$_baseUrl/session'),
+        Uri.parse('$_apiUrl/session'),
         headers: _buildHeaders(),
       );
     } catch (_) {
-      // Injoro gabimet e daljes / Ignore logout errors
     } finally {
       await clearCredentials();
     }
@@ -144,7 +151,7 @@ class TraccarService {
   /// GET /session — Merr sesionin aktual / Get current session
   Future<Session> getSession() async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/session'),
+      Uri.parse('$_apiUrl/session'),
       headers: _buildHeaders(),
     );
 
@@ -165,7 +172,7 @@ class TraccarService {
   /// GET /devices — Lista e të gjitha pajisjeve / List all devices
   Future<List<Device>> getDevices() async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/devices'),
+      Uri.parse('$_apiUrl/devices'),
       headers: _buildHeaders(),
     );
 
@@ -183,7 +190,7 @@ class TraccarService {
   /// GET /devices/{id} — Merr pajisjen specifike / Get specific device
   Future<Device> getDevice(int id) async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/devices/$id'),
+      Uri.parse('$_apiUrl/devices/$id'),
       headers: _buildHeaders(),
     );
 
@@ -200,9 +207,8 @@ class TraccarService {
   // ─── POSITION ENDPOINTS ───────────────────────────────────────────────────
 
   /// GET /positions — Merr pozicionet aktuale / Get current positions
-  /// Mund të filtrohet me deviceId / Can be filtered by deviceId
   Future<List<Position>> getPositions({int? deviceId}) async {
-    final uri = Uri.parse('$_baseUrl/positions').replace(
+    final uri = Uri.parse('$_apiUrl/positions').replace(
       queryParameters: deviceId != null
           ? {'deviceId': deviceId.toString()}
           : null,
@@ -220,13 +226,12 @@ class TraccarService {
   }
 
   /// GET /positions?deviceId={id}&from={ISO8601}&to={ISO8601}
-  /// Historiku i pozicioneve / Position history
   Future<List<Position>> getPositionHistory({
     required int deviceId,
     required DateTime from,
     required DateTime to,
   }) async {
-    final uri = Uri.parse('$_baseUrl/positions').replace(
+    final uri = Uri.parse('$_apiUrl/positions').replace(
       queryParameters: {
         'deviceId': deviceId.toString(),
         'from': from.toUtc().toIso8601String(),
